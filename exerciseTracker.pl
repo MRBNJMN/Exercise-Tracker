@@ -17,9 +17,10 @@ use strict;
 use warnings;
 
 use GetOpt::Long;
+use DBI;
 use Exercise;
 
-# To be used with GetOptions
+# To be used with GetOpt::Long to accept command line parameters
 my ($logMy, $weight, $reps, $distance, $time, $seeMy, $onDate);
 
 # To be used for database connection
