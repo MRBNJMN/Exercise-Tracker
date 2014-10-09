@@ -16,61 +16,95 @@ use 5.010;
 use strict;
 use warnings;
 
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case);
 use DBI;
 require 'Exercise.pl';
 
 # To be used with GetOpt::Long to accept command line parameters
-my ($logMy, $weight, $reps, $distance, $time, $seeMy, $onDate);
+my ($create, $read, $update, $delete, $weight, $reps, $distance, $time, $onDate);
 
 # To be used for database connection
 my ($DB, $user, $pass) = 
 	("dbi:mysql:exerciseTracker", "exerciseUser", "ax4GuXhXjKxvj76F");
 
-# To be used for storage by date
+# Today's date is the default table name (i.e. d_YYYYMMDD)
 # sprintf ensures consistency with leading zeroes
 my ($sec, $min, $hour, $mday, $mon, $year, $wday, $yday, $isdst) = localtime(time);
 my $storeDate = sprintf ("%d%02d%02d", $year + 1900, $mon + 1, $mday);
 
 # Pull options from the command line
 GetOptions (
-	'l|logMy=s' => \$logMy,
+	'C|create=s' => \$create,
+	'R|read:s' => \$read,
+	'U|update=s' => \$update,
+	'D|delete=s' => \$delete,
 	'w|weight=f' => \$weight,
 	'r|reps=i' => \$reps,
 	'd|distance=f' => \$distance,
 	't|time=f' => \$time,
-	's|seeMy=s' => \$seeMy,
 	'o|onDate=i' => \$onDate,
 );
 
 die "Usage error\n" if (
-	not ($logMy || $onDate)
-	or ($logMy && ($onDate || $seeMy))
-	or ($onDate && ($logMy || $weight || $reps || $distance || $time)));
+	not ($create || defined $read || $update || $delete)
+	or ($create && (defined $read || $update || $delete))
+	or (defined $read && ($create || $update || $delete || $weight || $reps || $distance || $time))
+	or ($update && ($create || defined $read || $delete))
+	or ($delete && ($create || defined $read || $update || $weight || $reps || $distance || $time))
+);
 
-# Create an Exercise object
-my $exercise = Exercise->new({
-	'logMy' => $logMy,
-	'weight' => $weight,
-	'reps' => $reps,
-	'distance' => $distance,
-	'time' => $time,
-});
+# If the user specified a date, use it
+$storeDate = $onDate if $onDate;
 
-# Connect to the DB
-$exercise->connectDB($DB, $user, $pass);
-
-# If $logMy has been specified, store the exercise in the DB by date
-if ($logMy) {
-	$exercise->storeExercise($storeDate);
+if (defined $create) {
+	my $exercise = Exercise->new({
+		'name' => $create,
+		'weight' => $weight,
+		'reps' => $reps,
+		'distance' => $distance,
+		'time' => $time,
+	});
+	$exercise->connectDB($DB, $user, $pass);
+	$exercise->storeExercise($storeDate);	
+	$exercise->disconnectDB();
 }
-
-# If $onDate has been specified, we need to fetch
-if ($onDate) {
-	# If the name of the exercise has been specified, get the specifics
-	if ($seeMy) { $exercise->pullExercise($seeMy, $onDate); }
-	# Else, list the exercises performed on that date
-	else { $exercise->pullExerciseList($onDate); }
+elsif (defined $read) {
+	if ($read) {
+		my $exercise = Exercise->new({
+			'name' => $read,
+		});
+		$exercise->connectDB($DB, $user, $pass);
+		$exercise->pullExercise($storeDate);
+		$exercise->disconnectDB();
+	} else {
+		my $exercise = Exercise->new({});
+		$exercise->connectDB($DB, $user, $pass);
+		$exercise->pullExerciseList($storeDate);
+		$exercise->disconnectDB();
+	}
 }
+elsif (defined $update) {
+	my $exercise = Exercise->new({
+		'name' => $update,
+		'weight' => $weight,
+		'reps' => $reps,
+		'distance' => $distance,
+		'time' => $time,
+	});
+	$exercise->connectDB($DB, $user, $pass);
+	$exercise->updateExercise($storeDate, 'weight', $weight) if $weight;
+	$exercise->updateExercise($storeDate, 'reps', $reps) if $reps;
+	$exercise->updateExercise($storeDate, 'distance', $distance) if $distance;
+	$exercise->updateExercise($storeDate, 'time', $time) if $time;
+	$exercise->disconnectDB();
+}
+elsif (defined $delete) {
+	my $exercise = Exercise->new({
+		'name' => $delete,
+	});
+	$exercise->connectDB($DB, $user, $pass);
+	$exercise->deleteExercise($storeDate);
+	$exercise->disconnectDB();
+}
+else { print "Unknown Error!\n"; }
 
-$exercise->disconnectDB();
