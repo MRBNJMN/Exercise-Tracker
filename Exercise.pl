@@ -22,7 +22,7 @@ sub connectDB {
 	# Connect to DB
 	$self->{'DBH'} = DBI->connect($DB, $user, $pass, {
 		'PrintError' => 1, # Warnings
-		'RaiseError' => 1, # Dies
+		'RaiseError' => 0, # Dies 0 - allows for custom die messages
 	}) or die "Can't connect to DB $DB: $DBI::errstr";
 }
 
@@ -39,8 +39,8 @@ sub disconnectDB {
 sub storeExercise {
 	my $self = shift;
 	my $date = shift;
-	my $statement; # Used to query the DB with interpolation available
-	my $sth; # Used as a statement handler
+	my $statement; 
+	my $sth; 
 
 	# Create the table if it doesn't exist
 	$statement =
@@ -59,14 +59,15 @@ sub storeExercise {
 sub pullExercise {
 	my $self = shift;
 	my $date = shift;
-	my $statement; # Used to query the DB with interpolation available
-	my $sth; # Used as a statement handler
+	my $statement; 
+	my $sth; 
 
 	# SELECT all information FROM the table representing the date specified WHERE the name of the exercise matches
 	$statement = "SELECT * FROM d_$date WHERE name = '$self->{'name'}'";
 	$sth = $self->{'DBH'}->prepare($statement);
 	$sth->execute; 
 	
+	# Die if no records were retrieved on that date	
 	die "No records for $self->{'name'} on $date\n" if $sth->rows == 0;
 
 	# Print the results, unless the result is 0
@@ -83,8 +84,8 @@ sub pullExercise {
 sub pullExerciseList {
 	my $self = shift;
 	my $date = shift;
-	my $statement; # Used to query the DB with interpolation available
-	my $sth; # Used as a statement handler
+	my $statement; 
+	my $sth; 
 
 	# SELECT exercise names FROM the table representing the date specified (YYYYMMDD)
 	$statement = "SELECT name FROM d_$date";
@@ -106,10 +107,12 @@ sub updateExercise {
 	my $statement;
 	my $sth;
 	
+	# UPDATE this field with this value WHERE name matches as specified
 	$statement = "UPDATE d_$date SET $field = $value WHERE name = '$self->{'name'}'";
 	$sth = $self->{'DBH'}->prepare($statement);
 	$sth->execute or die "Record for $self->{'name'} not found\n";
 
+	# Print confirmation
 	print "Record $self->{'name'} on $date updated\n";
 }
 
@@ -119,6 +122,7 @@ sub deleteExercise {
 	my $statement;
 	my $sth;
 
+	# DELETE from this date WHERE name matches as specified
 	$statement = "DELETE FROM d_$date WHERE name = '$self->{'name'}'";
 	$sth = $self->{'DBH'}->prepare($statement);
 	$sth->execute or die "No records for $self->{'name'} on $date\n";

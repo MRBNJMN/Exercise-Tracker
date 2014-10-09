@@ -16,12 +16,14 @@ use 5.010;
 use strict;
 use warnings;
 
-use Getopt::Long qw(:config no_ignore_case);
 use DBI;
+use Getopt::Long qw(:config no_ignore_case);
+use Pod::Usage;
+
 require 'Exercise.pl';
 
 # To be used with GetOpt::Long to accept command line parameters
-my ($create, $read, $update, $delete, $weight, $reps, $distance, $time, $onDate);
+my ($help, $man, $create, $read, $update, $delete, $weight, $reps, $distance, $time, $onDate);
 
 # To be used for database connection
 my ($DB, $user, $pass) = 
@@ -34,6 +36,8 @@ my $storeDate = sprintf ("%d%02d%02d", $year + 1900, $mon + 1, $mday);
 
 # Pull options from the command line
 GetOptions (
+	'h|help' => \$help,
+	'm|man' => \$man,
 	'C|create=s' => \$create,
 	'R|read:s' => \$read,
 	'U|update=s' => \$update,
@@ -45,10 +49,15 @@ GetOptions (
 	'o|onDate=i' => \$onDate,
 );
 
-die "Usage error\n" if (
-	not ($create || defined $read || $update || $delete)
-	or ($create && (defined $read || $update || $delete))
-	or (defined $read && ($create || $update || $delete || $weight || $reps || $distance || $time))
+# pod2usage configuration if --help or --man are invoked
+pod2usage( -verbose => 1 ) if $help;
+pod2usage( -verbose => 2 ) if $man;
+
+# Usage logic
+die 'Usage error. Try $ ./exerciseTracker --help or $ ./exerciseTracker --man' . "\n" if (
+	not ($create || defined $read || $update || $delete) # If a CRUD operation is not specified...
+	or ($create && (defined $read || $update || $delete)) # Or if --create is specified with the wrong parameters...
+	or (defined $read && ($create || $update || $delete || $weight || $reps || $distance || $time)) # Or if --read is specified with the wrong parameters, etc
 	or ($update && ($create || defined $read || $delete))
 	or ($delete && ($create || defined $read || $update || $weight || $reps || $distance || $time))
 );
@@ -56,7 +65,9 @@ die "Usage error\n" if (
 # If the user specified a date, use it
 $storeDate = $onDate if $onDate;
 
+# If the user specifies --create
 if (defined $create) {
+	# Create the object with whatever parameters were passed. Unspecified parameters receive undef
 	my $exercise = Exercise->new({
 		'name' => $create,
 		'weight' => $weight,
@@ -64,26 +75,39 @@ if (defined $create) {
 		'distance' => $distance,
 		'time' => $time,
 	});
+	# Connect, store, and disconnect
 	$exercise->connectDB($DB, $user, $pass);
 	$exercise->storeExercise($storeDate);	
 	$exercise->disconnectDB();
 }
+
+# If the user specifies --read
 elsif (defined $read) {
+	# If the user specified an exercise name
 	if ($read) {
+		# Create the object from the argument
 		my $exercise = Exercise->new({
 			'name' => $read,
 		});
+		# Connect, pull exercise details, and disconnect
 		$exercise->connectDB($DB, $user, $pass);
 		$exercise->pullExercise($storeDate);
 		$exercise->disconnectDB();
-	} else {
+	} 
+	# If the user did not specify an argument
+	else {
+		# Create an object from an empty hash
 		my $exercise = Exercise->new({});
+		# Connect, pull, and disconnect
 		$exercise->connectDB($DB, $user, $pass);
 		$exercise->pullExerciseList($storeDate);
 		$exercise->disconnectDB();
 	}
 }
+
+# If the user specifies --update
 elsif (defined $update) {
+	# Create the object with whatever parameters were passed. Unspecified parameters receive undef
 	my $exercise = Exercise->new({
 		'name' => $update,
 		'weight' => $weight,
@@ -91,20 +115,146 @@ elsif (defined $update) {
 		'distance' => $distance,
 		'time' => $time,
 	});
+	# Connect to the DB
 	$exercise->connectDB($DB, $user, $pass);
+	# Pass the date, the column to update, and the new value depending on what was specified
 	$exercise->updateExercise($storeDate, 'weight', $weight) if $weight;
 	$exercise->updateExercise($storeDate, 'reps', $reps) if $reps;
 	$exercise->updateExercise($storeDate, 'distance', $distance) if $distance;
 	$exercise->updateExercise($storeDate, 'time', $time) if $time;
+	# Disconnect from the DB
 	$exercise->disconnectDB();
 }
+
+# If the user specifies --delete
 elsif (defined $delete) {
+	# Create the object from the argument
 	my $exercise = Exercise->new({
 		'name' => $delete,
 	});
+	# Connect, delete, and disconnect
 	$exercise->connectDB($DB, $user, $pass);
 	$exercise->deleteExercise($storeDate);
 	$exercise->disconnectDB();
 }
+
+# If something weird happened
 else { print "Unknown Error!\n"; }
 
+__END__
+
+=head1 NAME
+
+Exercise Tracker
+
+=head1 DESCRIPTION
+
+Exercise Tracker records exercises based on name, weight, reps, distance, and/or time. Exercises are stored by date in a database running locally. All four CRUD operations are supported - exercises can be created, read, updated, and deleted by date. If a date is not specified for any operation, the current date is used.
+
+=head1 FILES
+
+Exercise.pl - contains the Exercise class, with methods for database connection and disconnection, table creation, and exercise create, read, update, and delete actions.
+exerciseTracker.pl - command line program that utilizes the mathods of the Exercise class. Accepts arguments to create, read, update, and delete exercises, as well as specify date, weight, reps, distance, and/or time.
+
+=head1 USAGE
+
+  Create:
+  $ ./exerciseTracker.pl --create <ARG> (OPTIONS)
+
+  Read:
+  $ ./exerciseTracker.pl --read (ARG) (OPTIONS)
+
+  Update:
+  $ ./exerciseTracker.pl --update <ARG> (OPTIONS)
+
+  Delete:
+  $ ./exerciseTracker.pl --delete <ARG> (OPTIONS)
+
+=head1 OPTIONS
+
+  -h, --help
+  See Options and Usage
+
+  -m, --man
+  See the man page for full instructions
+
+Exercise Tracker requires that exactly one of these four options be specified:
+
+  -C, --create 
+  Creates an exercise. Requires an argument for exercise name.
+  Optional additional parameters: -o, -w, -r, -d, -t
+
+  -R, --read
+  Reads details of an exercise. Allows an argument for exercise name. If no name is specified, displays all exercises on a particular day.
+  Optional additional parameters: -o
+  
+  -U, --update
+  Updates a detail of an exercise. Requires an argument for exercise name.
+  Mandatory additional parameter (only one): -w, -r, -d, -t
+  Optional additional parameters: -o
+  
+  -D, --delete
+  Deletes an exercise. Requires an argument for exercise name.
+  Optional additional parameters: -o
+
+Additional options:
+
+  -o, --onDate
+  Specifies date for any CRUD operation
+  Format: YYYYMMDD
+  
+  -w, --weight
+  Specifies weight for --create or --update operations
+  
+  -r, --reps
+  Specifies reps for --create or --update operations
+  
+  -d, --distance
+  Specifies distance for --create or --update operations
+  
+  -t, --time
+  Specifies time for --create or --update operations
+
+=head1 EXAMPLES
+
+  Create an exercise called 'Squats', performed on the current date:
+  $ ./exerciseTracker.pl --create 'Squats'
+  
+  Create an exercise called 'Bench Press' @ 135 pounds and 5 reps, performed on October 8th, 2014:
+  $ ./exerciseTracker.pl --create 'Bench Press' -w 135 -r 5 -o 20141008
+  
+  Create an exercise called 'Jogging' @ 3 miles and 30 minutes, performed on the current date:
+  $ ./exerciseTracker.pl --create 'Jogging' -d 3 -t 30
+  
+  Read all exercises performed on the current date:
+  $ ./exerciseTracker.pl --read
+  
+  Read all exercises performed on October 8th, 2014:
+  $ ./exerciseTracker.pl --read -o 20141008
+  
+  Read the specifics of 'Bench Press', performed on October 8th, 2014:
+  $ ./exerciseTracker.pl --read 'Bench Press' -o 20141008
+  
+  Update 'Bench Press' performed on October 8th, 2014 with weight 155:
+  $ ./exerciseTracker.pl --update 'Bench Press' -w 155 -o 20141008
+  
+  Update 'Jogging' performed on the current date with a time of 3 and a half hours:
+  $ ./exerciseTracker.pl --update 'Jogging' -t 3.5
+  
+  Delete 'Squats' performed today:
+  $ ./exerciseTracker.pl --delete 'Squats'
+  
+  Delete 'Bench Press' performed on October 8th, 2014:
+  $ ./exerciseTracker.pl --delete 'Bench Press' -o 20141008
+
+=head1 FUTURE IMPROVEMENTS
+
+  * Read, update, and delete operations should be improved to target single instances, rather than all instances, of an exercise
+  * User should be able to update multiple parameters at the same time, rather than just one
+  * User should have fine-tuned control over units used for distance, time, and weight
+
+=head1 AUTHOR
+
+  Ben Wheeler
+  Altair Engineering
+  bwheeler@altair.com
